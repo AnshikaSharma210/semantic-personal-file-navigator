@@ -1,0 +1,12 @@
+---
+description: Keep the Semantic Personal File Navigator in-scope
+alwaysApply: true
+---
+
+This repo is a personal file navigator. Agents must:
+
+- Only add features that help users find documents they uploaded.
+- Never add web browsing, shell execution, mass file delete, or a general chatbot.
+- Keep guardrails in `semantic_navigator/guardrails.py` as the single scope lock.
+- Refuse to index arbitrary filesystem paths from the server.
+- Update PROJECT.md when behaviour changes.
