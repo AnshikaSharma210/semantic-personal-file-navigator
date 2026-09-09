@@ -5,18 +5,32 @@
 [![FAISS](https://img.shields.io/badge/Vector%20Store-FAISS-orange)](https://faiss.ai/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-AI-powered file search for people who remember *what* a document was about, not *where* they saved it. Ask “find my Q3 report” and the agent ranks the most relevant files from **your** library — phones and laptops included, without ever scanning the whole device.
+AI-powered semantic search over your own files — find any document by describing what's in it, not by remembering its name.
+
+> **Runs entirely on your laptop. Your files never leave your machine.**
+
+---
+
+## Quickstart (Windows)
+
+1. [Download or clone this repo](https://github.com/AnshikaSharma210/semantic-personal-file-navigator)
+2. Double-click **`setup.bat`**
+3. Browser opens automatically at `localhost:8501`
+4. Add a folder (Desktop, Documents, Downloads) — files are indexed in the background
+5. Search in plain English: *"find my offer letter"*, *"HLD for project Muse"*, *"Q3 report"*
+
+> First run installs dependencies (~2 min). Every run after that opens instantly.
 
 ---
 
 ## What it does
 
-You add the documents you care about (from Files on iOS, Downloads on Android, or a folder on a laptop). The agent chunks them, tags metadata, embeds them, and stores vectors in FAISS. A natural-language query is context-engineered against that index so the first results are the files that match *intent*, not keyword coincidence.
+Point it at any folder on your machine. It reads every PDF, Word doc, text file, and Markdown file, splits them into chunks, embeds them using a local AI model, and stores the index on disk. When you search, it finds files by *meaning* — not just filename or keyword.
 
-**Useful when**
-- Reports, contracts, and notes live across WhatsApp, email, and Desktop.
-- You need the right PDF in seconds, not a filename guess.
-- Several people should each keep a **private** library on the same hosted app.
+**Built for situations like:**
+- You remember writing something about a topic but not what the file was called
+- You have hundreds of downloads and need one specific document fast
+- You want instant search across work docs, notes, contracts, and reports — all in one place
 
 ---
 
@@ -24,77 +38,71 @@ You add the documents you care about (from Files on iOS, Downloads on Android, o
 
 | Layer | Choice |
 |---|---|
-| UI | Streamlit (dark theme, mobile-usable uploader + search) |
-| Orchestration | LangChain documents + text splitters |
-| Embeddings | `all-MiniLM-L6-v2` locally (default) or OpenAI `text-embedding-3-small` |
-| Vector store | FAISS, persisted per library |
-| Optional phrasing | OpenAI chat — *only* over retrieved excerpts |
-| Guardrails | Query allowlist, document injection strip, library isolation, file-type / size caps |
+| UI | Streamlit — dark aurora theme, runs in browser |
+| Search | Hybrid: FAISS semantic (MiniLM) + BM25 keyword — fused via RRF |
+| Embeddings | `all-MiniLM-L6-v2` — runs locally, no API key needed |
+| Vector store | FAISS, persisted to disk per session |
+| File watching | `watchdog` — auto-indexes new files dropped into watched folders |
+| Guardrails | Query scope check, document injection strip, file-type/size caps |
+| Optional LLM | OpenAI GPT — only for summarising retrieved excerpts (not required) |
 
 ---
 
 ## How search works
 
 ```
-upload → extract text → chunk + metadata
-      → embed → FAISS
-query → scope check → embed query
-      → ranked passages → group by file → answer
+folder watch → extract text → chunk + metadata tag
+             → embed (local MiniLM) → FAISS + BM25 index on disk
+
+query → validate → embed query
+      → FAISS semantic search + BM25 keyword search
+      → RRF fusion → rank by relevance → show files + excerpts
 ```
 
-Context engineering: each chunk carries `filename`, `section`, `page`, and `file_id`. Retrieval is passage-level; the UI presents **documents** with why they matched.
+Two engines run in parallel for every search:
+- **FAISS** handles natural language — *"salary negotiation email"*
+- **BM25** handles exact codes and names — *"CR-24471"*, *"Muse HLD"*
+
+Results only show when the top match exceeds a confidence threshold — no guessing.
 
 ---
 
-## Guardrails (cannot be talked out of scope)
+## Guardrails
 
-- Answers only from the signed-in library. No web browse, no shell, no general chat.
+- Files stay on your disk. Nothing is uploaded anywhere.
 - Queries that look like jailbreaks or code execution are refused.
-- Instruction-like lines inside uploaded files are stripped before indexing and before the LLM sees them.
-- Allowed types: PDF, DOCX, TXT, MD. Size and file-count caps are enforced.
-- Libraries are keyed by a private phrase (hashed). Different keys never share an index.
-
-A website **cannot** index an entire phone or laptop disk. That is an OS/browser rule, not a missing feature. Users pick files; the agent makes them findable.
+- Text injected inside documents (*"ignore previous instructions…"*) is stripped before indexing.
+- Supported types: PDF, DOCX, TXT, MD.
+- Index survives restarts — no re-indexing needed.
 
 ---
 
-## Run locally (laptop with full-disk search)
+## Auto-start on Windows login
+
+Run once to make it start silently in the background on every login:
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows
+python install_startup.py
+# To remove:
+python install_startup.py remove
+```
+
+After that, just open `http://localhost:8501` whenever you need to search.
+
+---
+
+## Manual setup (Mac / Linux / advanced)
+
+```bash
+git clone https://github.com/AnshikaSharma210/semantic-personal-file-navigator
+cd semantic-personal-file-navigator
 pip install -r requirements.txt
-copy .env.example .env
-```
-
-**Step 1 — index your laptop files (one command)**
-```bash
-python local_scan.py
-```
-Walks Desktop, Documents, Downloads, and OneDrive. Skips files already indexed. Re-run any time to pick up new files.
-
-**Step 2 — search**
-```bash
-# In the UI:
-streamlit run streamlit_app.py
-# Or directly from terminal:
-python local_scan.py --search "find my Q3 report"
-```
-
-Use library key `local-laptop` in the sidebar (matches what `local_scan.py` uses by default).
-
-**Dry run to preview what would be indexed:**
-```bash
-python local_scan.py --dry-run
+python run.py
 ```
 
 ---
 
-## Host and share
-
-Deploy `streamlit_app.py` on Streamlit Community Cloud (or any Python host). Each person uses their own library key. Put optional secrets in the host dashboard, never in git.
-
-See **[PROJECT.md](./PROJECT.md)** for what was built, file-by-file, and the product constraints.
+See **[PROJECT.md](./PROJECT.md)** for architecture decisions and what was deliberately left out.
 
 ---
 
